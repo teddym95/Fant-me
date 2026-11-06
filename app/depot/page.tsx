@@ -257,9 +257,42 @@ function detecter(ops: Operation[]): Fantome[] {
   return resultats.sort((a, b) => b.annuel - a.annuel);
 }
 
+function lettre(f: Fantome): string {
+  const date = new Date().toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+  return `[Prénom NOM]
+[Adresse]
+[Code postal Ville]
+
+${f.nom}
+Service résiliation
+
+[Ville], le ${date}
+
+Objet : résiliation de mon abonnement
+
+Madame, Monsieur,
+
+Je vous informe par la présente de ma décision de résilier l'abonnement ${f.nom} dont je suis titulaire (numéro de client ou de contrat : [à compléter]).
+
+Cette résiliation prend effet à la date la plus proche permise par les conditions de mon contrat. Merci de m'indiquer cette date par écrit et de me confirmer la prise en compte de ma demande.
+
+Je vous demande de ne plus procéder à aucun prélèvement après cette date.
+
+Je vous prie d'agréer, Madame, Monsieur, l'expression de mes salutations distinguées.
+
+[Prénom NOM]`;
+}
+
 export default function Depot() {
   const [fantomes, setFantomes] = useState<Fantome[] | null>(null);
   const [erreur, setErreur] = useState("");
+  const [resilies, setResilies] = useState<string[]>([]);
+  const [ouverte, setOuverte] = useState<string | null>(null);
+  const [copie, setCopie] = useState(false);
 
   function analyser(texte: string) {
     const ops = lireReleve(texte);
@@ -271,6 +304,8 @@ export default function Depot() {
       return;
     }
     setErreur("");
+    setResilies([]);
+    setOuverte(null);
     setFantomes(detecter(ops));
   }
 
@@ -288,12 +323,34 @@ export default function Depot() {
   function recommencer() {
     setFantomes(null);
     setErreur("");
+    setResilies([]);
+    setOuverte(null);
   }
 
-  const total = (fantomes ?? []).reduce((s, f) => s + f.annuel, 0);
+  function basculer(nom: string) {
+    setResilies((r) =>
+      r.includes(nom) ? r.filter((n) => n !== nom) : [...r, nom]
+    );
+  }
+
+  async function copier(texte: string) {
+    try {
+      await navigator.clipboard.writeText(texte);
+      setCopie(true);
+      setTimeout(() => setCopie(false), 2000);
+    } catch {
+      setCopie(false);
+    }
+  }
+
+  const liste = fantomes ?? [];
+  const total = liste.reduce((s, f) => s + f.annuel, 0);
+  const choisis = liste.filter((f) => resilies.includes(f.nom));
+  const economie = choisis.reduce((s, f) => s + f.annuel, 0);
+  const verrouilles = choisis.filter((f) => f.nom !== liste[0]?.nom).length;
 
   return (
-    <main className="mx-auto max-w-md px-6 pb-16 pt-8">
+    <main className="mx-auto max-w-md px-6 pb-44 pt-8">
       <Link href="/" className="text-sm text-[#1c1917]/60 underline">
         ← Accueil
       </Link>
@@ -347,7 +404,7 @@ export default function Depot() {
           <p className="mt-6 text-sm font-medium uppercase tracking-widest text-[#b8452e]">
             Tes fantômes
           </p>
-          {fantomes.length === 0 ? (
+          {liste.length === 0 ? (
             <>
               <h1 className="mt-3 font-serif text-3xl font-bold leading-tight">
                 Aucun prélèvement récurrent repéré.
@@ -360,46 +417,100 @@ export default function Depot() {
           ) : (
             <>
               <h1 className="mt-3 font-serif text-3xl font-bold leading-tight">
-                {fantomes.length}{" "}
-                {fantomes.length > 1 ? "fantômes possibles" : "fantôme possible"}
+                {liste.length}{" "}
+                {liste.length > 1 ? "fantômes possibles" : "fantôme possible"}
                 , soit{" "}
                 <span className="text-[#b8452e]">{eur0.format(total)}</span> par
                 an.
               </h1>
               <p className="mt-4 leading-relaxed text-[#1c1917]/70">
-                Classés du plus coûteux au moins coûteux, sur une année. À toi
-                de voir lesquels tu utilises vraiment.
+                Classés du plus coûteux au moins coûteux, sur une année. Marque
+                ceux que tu veux résilier : ton économie se met à jour.
               </p>
 
               <ul className="mt-8 space-y-3">
-                {fantomes.map((f, i) => (
-                  <li
-                    key={f.nom}
-                    className="rounded-2xl border border-[#1c1917]/15 p-5"
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <p className="text-sm text-[#1c1917]/50">#{i + 1}</p>
-                        <h2 className="font-serif text-xl font-bold">
-                          {f.nom}
-                        </h2>
-                        <p className="mt-1 text-sm text-[#1c1917]/60">
-                          {eur2.format(f.mensuel)} par mois · vu {f.occurrences}{" "}
-                          fois
-                        </p>
-                        <p className="mt-1 text-xs text-[#1c1917]/40">
-                          {f.libelle}
+                {liste.map((f, i) => {
+                  const pris = resilies.includes(f.nom);
+                  return (
+                    <li
+                      key={f.nom}
+                      className="rounded-2xl border border-[#1c1917]/15 p-5"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="text-sm text-[#1c1917]/50">#{i + 1}</p>
+                          <h2 className="font-serif text-xl font-bold">
+                            {f.nom}
+                          </h2>
+                          <p className="mt-1 text-sm text-[#1c1917]/60">
+                            {eur2.format(f.mensuel)} par mois · vu{" "}
+                            {f.occurrences} fois
+                          </p>
+                          <p className="mt-1 text-xs text-[#1c1917]/40">
+                            {f.libelle}
+                          </p>
+                        </div>
+                        <p className="whitespace-nowrap font-serif text-2xl text-[#b8452e]">
+                          {eur0.format(f.annuel)}
+                          <span className="block text-right text-xs text-[#1c1917]/50">
+                            par an
+                          </span>
                         </p>
                       </div>
-                      <p className="whitespace-nowrap font-serif text-2xl text-[#b8452e]">
-                        {eur0.format(f.annuel)}
-                        <span className="block text-right text-xs text-[#1c1917]/50">
-                          par an
-                        </span>
-                      </p>
-                    </div>
-                  </li>
-                ))}
+
+                      <div className="mt-4 flex flex-col gap-2">
+                        <button
+                          onClick={() => basculer(f.nom)}
+                          className={`min-h-12 rounded-full border px-4 font-medium ${
+                            pris
+                              ? "border-[#1c1917] bg-[#1c1917] text-[#faf6ee]"
+                              : "border-[#1c1917]/25"
+                          }`}
+                        >
+                          {pris ? "Je le résilie" : "Je veux le résilier"}
+                        </button>
+
+                        {i === 0 ? (
+                          <button
+                            onClick={() =>
+                              setOuverte(ouverte === f.nom ? null : f.nom)
+                            }
+                            className="min-h-12 rounded-full px-4 font-medium text-[#b8452e] underline"
+                          >
+                            {ouverte === f.nom
+                              ? "Masquer la lettre"
+                              : "Voir ma lettre de résiliation (gratuite)"}
+                          </button>
+                        ) : (
+                          <Link
+                            href="/tarifs"
+                            className="flex min-h-12 items-center justify-center rounded-full px-4 text-sm text-[#1c1917]/60 underline"
+                          >
+                            Lettre verrouillée · Débloquer
+                          </Link>
+                        )}
+                      </div>
+
+                      {i === 0 && ouverte === f.nom && (
+                        <div className="mt-4">
+                          <pre className="whitespace-pre-wrap rounded-2xl bg-[#1c1917]/5 p-4 font-sans text-sm leading-relaxed">
+                            {lettre(f)}
+                          </pre>
+                          <p className="mt-2 text-xs text-[#1c1917]/50">
+                            Complète les parties entre crochets avant
+                            d&apos;envoyer.
+                          </p>
+                          <button
+                            onClick={() => copier(lettre(f))}
+                            className="mt-3 flex min-h-12 w-full items-center justify-center rounded-full bg-[#1c1917] px-4 font-semibold text-[#faf6ee]"
+                          >
+                            {copie ? "Copiée" : "Copier la lettre"}
+                          </button>
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             </>
           )}
@@ -410,6 +521,29 @@ export default function Depot() {
           >
             Analyser un autre fichier
           </button>
+
+          {choisis.length > 0 && (
+            <div className="fixed inset-x-0 bottom-0 border-t border-[#1c1917]/15 bg-[#faf6ee] px-6 py-4">
+              <div className="mx-auto max-w-md">
+                <p className="text-center">
+                  Économie en résiliant :{" "}
+                  <span className="font-serif text-xl font-bold text-[#b8452e]">
+                    {eur0.format(economie)}
+                  </span>{" "}
+                  par an
+                </p>
+                {verrouilles > 0 && (
+                  <Link
+                    href="/tarifs"
+                    className="mt-3 flex min-h-12 w-full items-center justify-center rounded-full bg-[#1c1917] px-4 font-semibold text-[#faf6ee]"
+                  >
+                    Débloquer {verrouilles}{" "}
+                    {verrouilles > 1 ? "lettres" : "lettre"}
+                  </Link>
+                )}
+              </div>
+            </div>
+          )}
         </>
       )}
     </main>
