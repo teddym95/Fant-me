@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ChangeEvent } from "react";
 import Link from "next/link";
 
@@ -293,6 +293,15 @@ export default function Depot() {
   const [resilies, setResilies] = useState<string[]>([]);
   const [ouverte, setOuverte] = useState<string | null>(null);
   const [copie, setCopie] = useState(false);
+  const [debloque, setDebloque] = useState(false);
+
+  useEffect(() => {
+    try {
+      setDebloque(Boolean(localStorage.getItem("fantomes-debloque")));
+    } catch {
+      /* stockage indisponible */
+    }
+  }, []);
 
   function analyser(texte: string) {
     const ops = lireReleve(texte);
@@ -347,7 +356,9 @@ export default function Depot() {
   const total = liste.reduce((s, f) => s + f.annuel, 0);
   const choisis = liste.filter((f) => resilies.includes(f.nom));
   const economie = choisis.reduce((s, f) => s + f.annuel, 0);
-  const verrouilles = choisis.filter((f) => f.nom !== liste[0]?.nom).length;
+  const verrouilles = debloque
+    ? 0
+    : choisis.filter((f) => f.nom !== liste[0]?.nom).length;
 
   return (
     <main className="mx-auto max-w-md px-6 pb-44 pt-8">
@@ -470,7 +481,7 @@ export default function Depot() {
                           {pris ? "Je le résilie" : "Je veux le résilier"}
                         </button>
 
-                        {i === 0 ? (
+                        {i === 0 || debloque ? (
                           <button
                             onClick={() =>
                               setOuverte(ouverte === f.nom ? null : f.nom)
@@ -479,7 +490,9 @@ export default function Depot() {
                           >
                             {ouverte === f.nom
                               ? "Masquer la lettre"
-                              : "Voir ma lettre de résiliation (gratuite)"}
+                              : i === 0 && !debloque
+                                ? "Voir ma lettre de résiliation (gratuite)"
+                                : "Voir ma lettre de résiliation"}
                           </button>
                         ) : (
                           <Link
@@ -491,7 +504,7 @@ export default function Depot() {
                         )}
                       </div>
 
-                      {i === 0 && ouverte === f.nom && (
+                      {(i === 0 || debloque) && ouverte === f.nom && (
                         <div className="mt-4">
                           <pre className="whitespace-pre-wrap rounded-2xl bg-[#1c1917]/5 p-4 font-sans text-sm leading-relaxed">
                             {lettre(f)}
